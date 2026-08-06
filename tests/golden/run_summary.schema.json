@@ -1,0 +1,101 @@
+{
+  "$defs": {
+    "AggregateSummary": {
+      "properties": {
+        "disclosure_rate": {
+          "$ref": "#/$defs/MeanStd"
+        },
+        "utility": {
+          "$ref": "#/$defs/MeanStd"
+        }
+      },
+      "required": [
+        "disclosure_rate",
+        "utility"
+      ],
+      "type": "object"
+    },
+    "MeanStd": {
+      "properties": {
+        "mean": {
+          "type": "number"
+        },
+        "std": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "mean",
+        "std"
+      ],
+      "type": "object"
+    },
+    "ScenarioSummary": {
+      "properties": {
+        "disclosure_rate": {
+          "$ref": "#/$defs/MeanStd"
+        },
+        "domain": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "scenario_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "utility": {
+          "$ref": "#/$defs/MeanStd"
+        }
+      },
+      "required": [
+        "scenario_id",
+        "domain",
+        "disclosure_rate",
+        "utility"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "agent": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "aggregate": {
+      "$ref": "#/$defs/AggregateSummary"
+    },
+    "k": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "n_scenarios": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "scenarios": {
+      "items": {
+        "$ref": "#/$defs/ScenarioSummary"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "default": 1,
+      "type": "integer"
+    },
+    "seeds": {
+      "items": {
+        "type": "integer"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "agent",
+    "seeds",
+    "k",
+    "n_scenarios",
+    "aggregate",
+    "scenarios"
+  ],
+  "type": "object"
+}

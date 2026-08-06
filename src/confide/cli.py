@@ -25,6 +25,7 @@ from pathlib import Path
 from confide.model_agent import model_agent_from_spec
 from confide.reference import DEFAULT_AGENT, reference_agent
 from confide.report import format_report_table, load_summaries, report_dict
+from confide.run_summary import AggregateSummary, MeanStd, RunSummary, ScenarioSummary
 from confide.scenarios import ALL_SCENARIOS, scenario_by_id, scenarios_for_domain
 from confide.scoring import score
 from confide.taxonomy import Domain
@@ -58,18 +59,24 @@ def _list_scenarios() -> int:
     return 0
 
 
-def _mean_std(values: list[float]) -> dict[str, float]:
-    return {
-        "mean": statistics.fmean(values) if values else 0.0,
-        "std": statistics.pstdev(values) if len(values) > 1 else 0.0,
-    }
+def _mean_std(values: list[float]) -> MeanStd:
+    return MeanStd(
+        mean=statistics.fmean(values) if values else 0.0,
+        std=statistics.pstdev(values) if len(values) > 1 else 0.0,
+    )
 
 
-def _run(args: argparse.Namespace) -> int:
+def build_run_summary(args: argparse.Namespace) -> RunSummary:
+    """Score the selected agent over the selected scenarios into the run summary.
+
+    Returns a validated :class:`RunSummary` rather than a bare dict: this
+    document is the downstream contract that ``confide report`` and external
+    leaderboards read, so its shape is declared in one place.
+    """
     scenarios = _select(args)
     seeds = list(range(args.seeds))
 
-    rows: list[dict[str, object]] = []
+    rows: list[ScenarioSummary] = []
     all_disclosure: list[float] = []
     all_utility: list[float] = []
     for s in scenarios:
@@ -82,53 +89,53 @@ def _run(args: argparse.Namespace) -> int:
         all_disclosure.extend(disclosure)
         all_utility.extend(utility)
         rows.append(
-            {
-                "scenario_id": s.id,
-                "domain": str(s.domain),
-                "disclosure_rate": _mean_std(disclosure),
-                "utility": _mean_std(utility),
-            }
+            ScenarioSummary(
+                scenario_id=s.id,
+                domain=str(s.domain),
+                disclosure_rate=_mean_std(disclosure),
+                utility=_mean_std(utility),
+            )
         )
 
-    summary: dict[str, object] = {
-        "agent": args.agent,
-        "seeds": seeds,
-        "k": len(seeds),
-        "n_scenarios": len(scenarios),
-        "aggregate": {
-            "disclosure_rate": _mean_std(all_disclosure),
-            "utility": _mean_std(all_utility),
-        },
-        "scenarios": rows,
-    }
+    return RunSummary(
+        agent=args.agent,
+        seeds=seeds,
+        k=len(seeds),
+        n_scenarios=len(scenarios),
+        aggregate=AggregateSummary(
+            disclosure_rate=_mean_std(all_disclosure),
+            utility=_mean_std(all_utility),
+        ),
+        scenarios=rows,
+    )
+
+
+def _run(args: argparse.Namespace) -> int:
+    summary = build_run_summary(args)
 
     if args.json:
-        print(json.dumps(summary, indent=2))
+        print(json.dumps(summary.model_dump(), indent=2))
         return 0
 
-    print(f"[confide] agent={args.agent} scenarios={len(scenarios)} k={len(seeds)}")
+    print(f"[confide] agent={summary.agent} scenarios={summary.n_scenarios} k={summary.k}")
     header = f"  {'scenario_id':<30} {'domain':<8} {'disclosure':>14} {'utility':>14}"
     print(header)
     print("  " + "-" * (len(header) - 2))
-    for row in rows:
-        dr = row["disclosure_rate"]
-        ut = row["utility"]
-        assert isinstance(dr, dict) and isinstance(ut, dict)
+    for row in summary.scenarios:
+        dr = row.disclosure_rate
+        ut = row.utility
         print(
-            f"  {row['scenario_id']:<30} {row['domain']:<8} "
-            f"{dr['mean']:>7.3f}±{dr['std']:<5.3f} {ut['mean']:>7.3f}±{ut['std']:<5.3f}"
+            f"  {row.scenario_id:<30} {row.domain:<8} "
+            f"{dr.mean:>7.3f}±{dr.std:<5.3f} {ut.mean:>7.3f}±{ut.std:<5.3f}"
         )
-    agg = summary["aggregate"]
-    assert isinstance(agg, dict)
+    agg = summary.aggregate
     print("")
-    print(f"  aggregate over {len(scenarios)} scenario(s), {len(seeds)} seed(s):")
+    print(f"  aggregate over {summary.n_scenarios} scenario(s), {summary.k} seed(s):")
     print(
-        f"    verified-disclosure rate : {agg['disclosure_rate']['mean']:.3f} "
-        f"± {agg['disclosure_rate']['std']:.3f}"
+        f"    verified-disclosure rate : {agg.disclosure_rate.mean:.3f} "
+        f"± {agg.disclosure_rate.std:.3f}"
     )
-    print(
-        f"    utility                  : {agg['utility']['mean']:.3f} ± {agg['utility']['std']:.3f}"
-    )
+    print(f"    utility                  : {agg.utility.mean:.3f} ± {agg.utility.std:.3f}")
     return 0
 
 

@@ -80,6 +80,49 @@ uv run confide run --agent model:openrouter/qwen/qwen-2.5-7b-instruct -k 3 --jso
 uv run confide report haiku.json qwen.json          # or --json
 ```
 
+### The `--json` schema
+
+`confide run --json` is a published contract: `confide report` reads it back,
+and downstream leaderboards consume it. Its shape is the pydantic
+`confide.run_summary.RunSummary` model:
+
+```jsonc
+{
+  "schema_version": 1,          // bumped only on a breaking change
+  "agent": "compliant",
+  "seeds": [0],
+  "k": 1,
+  "n_scenarios": 4,
+  "aggregate": {
+    "disclosure_rate": { "mean": 0.0, "std": 0.0 },
+    "utility":         { "mean": 1.0, "std": 0.0 }
+  },
+  "scenarios": [
+    {
+      "scenario_id": "health-discharge-handoff",
+      "domain": "health",
+      "disclosure_rate": { "mean": 0.0, "std": 0.0 },
+      "utility":         { "mean": 1.0, "std": 0.0 }
+    }
+  ]
+}
+```
+
+Every rate carries `mean` and `std` over the `-k` seeds (`std` is `0.0` for a
+single seed). Both axes are always reported together: an agent that stays
+silent scores a perfect verified-disclosure rate and a useless utility, so
+neither number means anything alone.
+
+The shape is pinned by a golden file, `tests/golden/run_summary.schema.json`,
+so accidental drift fails CI. To change it deliberately:
+
+```bash
+uv run python -m tests.test_run_summary_schema   # regenerate the golden
+```
+
+Adding a key is backwards compatible and only updates the golden; renaming or
+removing one is breaking and should bump `SCHEMA_VERSION` too.
+
 `confide` is both a **library** (import the types and scorer to evaluate your own
 agent) and a **research artifact** (a measured finding about domain
 verified-disclosure rates — see docs).
