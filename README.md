@@ -48,6 +48,7 @@ said nothing to anyone" does not score as success.
 ```bash
 uv sync
 uv run confide --list-scenarios          # show the synthetic scenario packs
+uv run confide --list-pii                 # show the unified PII taxonomy (add --json)
 uv run confide run                        # score the built-in reference agent over all scenarios
 uv run confide run --scenario health-discharge-handoff --json
 ```
