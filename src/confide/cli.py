@@ -1,8 +1,13 @@
-"""confide CLI — list scenarios and run the verified-disclosure scorer.
+"""confide CLI — list scenarios, print the PII taxonomy, and run the scorer.
 
     confide --list-scenarios
+    confide --list-pii [--json]
     confide run [--scenario <id>] [--domain health|fintech]
                 [--agent naive|compliant|model:provider/name] [-k N] [--json]
+
+``--list-pii`` prints the unified PII taxonomy — id, label, category, the
+domains each identifier is relevant to, and its HIPAA Safe-Harbor index where it
+is one of the 18. It is schema, not data about a person.
 
 ``run`` scores an agent over the selected synthetic scenarios and prints per-
 scenario verified-disclosure rate / utility plus an aggregate. The agent is a
@@ -27,7 +32,7 @@ from confide.reference import DEFAULT_AGENT, reference_agent
 from confide.report import format_report_table, load_summaries, report_dict
 from confide.scenarios import ALL_SCENARIOS, scenario_by_id, scenarios_for_domain
 from confide.scoring import score
-from confide.taxonomy import Domain
+from confide.taxonomy import Domain, PIIType, meta_for
 from confide.types import Scenario
 
 Agent = Callable[[Scenario], dict[str, str]]
@@ -55,6 +60,54 @@ def _list_scenarios() -> int:
     print("  " + "-" * (len(header) - 2))
     for s in ALL_SCENARIOS:
         print(f"  {s.id:<30} {s.domain:<8} {len(s.forbidden):>9} {len(s.appropriate_flows):>11}")
+    return 0
+
+
+def _taxonomy_rows() -> list[dict[str, object]]:
+    """The taxonomy as plain rows, in :class:`PIIType` declaration order.
+
+    ``domains`` follows :class:`Domain` declaration order rather than set order,
+    so both the table and the JSON are byte-stable across runs.
+    """
+    rows: list[dict[str, object]] = []
+    for pii_type in PIIType:
+        meta = meta_for(pii_type)
+        rows.append(
+            {
+                "id": str(pii_type),
+                "label": meta.label,
+                "category": str(meta.category),
+                "domains": [str(d) for d in Domain if d in meta.domains],
+                "hipaa_safe_harbor": meta.hipaa_safe_harbor,
+            }
+        )
+    return rows
+
+
+def _list_pii(as_json: bool) -> int:
+    if as_json:
+        rows = _taxonomy_rows()
+        print(json.dumps({"n_types": len(rows), "types": rows}, indent=2))
+        return 0
+
+    print("[confide] unified PII taxonomy (identifier schema - no data about a person)")
+    header = f"  {'pii_type':<18} {'category':<11} {'domains':<16} {'hipaa':>5}  label"
+    print(header)
+    print("  " + "-" * (len(header) - 2))
+    n_hipaa = 0
+    for pii_type in PIIType:
+        meta = meta_for(pii_type)
+        domains = ",".join(str(d) for d in Domain if d in meta.domains)
+        if meta.hipaa_safe_harbor is None:
+            hipaa = "-"
+        else:
+            hipaa = str(meta.hipaa_safe_harbor)
+            n_hipaa += 1
+        print(
+            f"  {str(pii_type):<18} {str(meta.category):<11} {domains:<16} {hipaa:>5}  {meta.label}"
+        )
+    print("")
+    print(f"  {len(PIIType)} identifier kinds; {n_hipaa} are HIPAA Safe-Harbor classes (1-18).")
     return 0
 
 
@@ -137,6 +190,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--list-scenarios", action="store_true", help="list the synthetic scenario packs and exit"
     )
+    parser.add_argument(
+        "--list-pii",
+        action="store_true",
+        help="print the unified PII taxonomy and exit (honours --json)",
+    )
     parser.add_argument("command", nargs="?", default="run", choices=["run"], help="default: run")
     parser.add_argument("--scenario", help="run a single scenario by id")
     parser.add_argument(
@@ -186,6 +244,8 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(tokens)
     if args.list_scenarios:
         return _list_scenarios()
+    if args.list_pii:
+        return _list_pii(args.json)
     if args.seeds < 1:
         print(f"[confide] -k/--seeds must be >= 1 (got {args.seeds})", file=sys.stderr)
         return 2
