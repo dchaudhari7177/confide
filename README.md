@@ -84,6 +84,22 @@ uv run confide report haiku.json qwen.json          # or --json
 agent) and a **research artifact** (a measured finding about domain
 verified-disclosure rates — see docs).
 
+## HIPAA Safe-Harbor coverage
+
+The health packs are keyed to the 45 CFR 164.514(b)(2) Safe-Harbor identifier
+classes. Coverage today is **3 of 18** — names (1), dates (3), and medical record
+numbers (8). The remaining 15 are unexercised and are open ground for new
+synthetic scenarios.
+
+```bash
+uv run python -c "from confide.coverage import format_coverage; print(format_coverage())"
+```
+
+`confide.coverage` reports the mapping (`hipaa_coverage`), the split
+(`covered_types` / `uncovered_types`), and the table above. `tests/test_coverage.py`
+pins the current set as a **floor**, so coverage can grow freely but cannot
+silently shrink.
+
 ## Prior art
 
 Contextual integrity (Nissenbaum); ConfAIde; PrivacyLens; DecodingTrust
